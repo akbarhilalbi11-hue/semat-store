@@ -1,0 +1,10 @@
+{
+	"runtime": "nodejs24.x",
+	"handler": "..\\..\\..\\..\\laragon\\www\\cardholder-store\\.svelte-kit\\vercel-tmp\\index.js",
+	"launcherType": "Nodejs",
+	"experimentalResponseStreaming": true,
+	"framework": {
+		"slug": "sveltekit",
+		"version": "3.2.0"
+	}
+}

@@ -1,0 +1,72 @@
+{
+	"version": 3,
+	"routes": [
+		{
+			"src": ".*",
+			"continue": true,
+			"transforms": [
+				{
+					"type": "request.query",
+					"op": "delete",
+					"target": {
+						"key": "__pathname"
+					}
+				}
+			]
+		},
+		{
+			"src": "/_app/immutable/.+",
+			"headers": {
+				"cache-control": "public, immutable, max-age=31536000"
+			}
+		},
+		{
+			"handle": "filesystem"
+		},
+		{
+			"src": "/_app/immutable/.+",
+			"status": 404,
+			"headers": {
+				"cache-control": "no-store"
+			},
+			"continue": false
+		},
+		{
+			"src": "^/?(?:/__data.json)?$",
+			"dest": "/"
+		},
+		{
+			"src": "^/api/search/?(?:/__data.json)?$",
+			"dest": "/api/search"
+		},
+		{
+			"src": "^/cara-pemesanan/?(?:/__data.json)?$",
+			"dest": "/cara-pemesanan"
+		},
+		{
+			"src": "^/faq/?(?:/__data.json)?$",
+			"dest": "/faq"
+		},
+		{
+			"src": "^/katalog/?(?:/__data.json)?$",
+			"dest": "/katalog"
+		},
+		{
+			"src": "^/kontak/?(?:/__data.json)?$",
+			"dest": "/kontak"
+		},
+		{
+			"src": "^/produk/([^/]+?)/?(?:/__data.json)?$",
+			"dest": "/produk/[slug]"
+		},
+		{
+			"src": "^/tentang/?(?:/__data.json)?$",
+			"dest": "/tentang"
+		},
+		{
+			"src": "/.*",
+			"dest": "/![-]/catchall"
+		}
+	],
+	"overrides": {}
+}

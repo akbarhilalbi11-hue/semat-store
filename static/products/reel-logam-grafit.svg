@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600">
+			<rect width="600" height="600" fill="#EFEBE4"/>
+			<rect x="24" y="24" width="552" height="552" rx="8" fill="#FAF9F6" stroke="#DDD8CE" stroke-width="1.5"/>
+			
+			<rect x="284" y="135" width="32" height="48" rx="8" fill="#8A7F6A"/>
+			<circle cx="300" cy="295" r="96" fill="#3B3D40" stroke="#DDD8CE" stroke-width="3"/>
+			<circle cx="300" cy="295" r="74" fill="none" stroke="#A8ADB3" stroke-width="2" stroke-dasharray="4 4"/>
+			<circle cx="300" cy="295" r="36" fill="#8A7F6A"/>
+			<line x1="300" y1="391" x2="300" y2="445" stroke="#6E6A62" stroke-width="3"/>
+			<rect x="286" y="445" width="28" height="34" rx="4" fill="#A8ADB3"/>
+			<text x="300" y="545" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#6E6A62" letter-spacing="1.5">REEL BAJA — ABU GRAFIT</text>
+		
+		</svg>

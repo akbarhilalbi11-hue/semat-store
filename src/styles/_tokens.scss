@@ -1,0 +1,44 @@
+// Token Desain: Palet Katalog Hangat & Netral
+:root {
+	// Permukaan & Latar
+	--bg-canvas: #f6f4f0;
+	--bg-surface: #ffffff;
+	--bg-subtle: #efebe4;
+	--bg-elevated: #faf9f6;
+
+	// Tipografi & Teks
+	--text-primary: #1f1e1b;
+	--text-secondary: #6e6a62;
+	--text-muted: #938e84;
+	--text-inverse: #f6f4f0;
+
+	// Garis & Pembatas
+	--border-hairline: #ddd8ce;
+	--border-strong: #bfb8aa;
+
+	// Aksen Tunggal (Taupe Hangat)
+	--accent-taupe: #8a7f6a;
+	--accent-taupe-hover: #736957;
+	--accent-taupe-soft: rgba(138, 127, 106, 0.12);
+
+	// Status Semantik Netral (Tanpa warna neon)
+	--status-success-bg: #e8ede7;
+	--status-success-text: #2d4732;
+	--status-warning-bg: #f3ece0;
+	--status-warning-text: #6b4e1e;
+	--status-danger-bg: #f4e6e4;
+	--status-danger-text: #7a2e26;
+
+	// Tipografi
+	--font-heading: 'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, sans-serif;
+	--font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+
+	// Radius Sudut Konsisten (4px - 8px)
+	--radius-sm: 4px;
+	--radius-md: 6px;
+	--radius-lg: 8px;
+
+	// Bayangan Minimal
+	--shadow-subtle: 0 2px 8px rgba(31, 30, 27, 0.04);
+	--shadow-overlay: 0 12px 32px rgba(31, 30, 27, 0.08);
+}

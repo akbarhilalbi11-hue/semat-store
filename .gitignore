@@ -1,0 +1,15 @@
+node_modules
+
+# Output build SvelteKit
+/.svelte-kit
+/build
+
+# Environment variables (JANGAN PERNAH DI-COMMIT)
+.env
+.env.*
+!.env.example
+
+# File sistem & log
+.DS_Store
+Thumbs.db
+npm-debug.log*
