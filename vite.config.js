@@ -5,16 +5,14 @@ import { defineConfig } from 'vite';
 export default defineConfig({
 	plugins: [
 		sveltekit({
-			adapter: adapter()
+			adapter: adapter({
+				runtime: 'nodejs22.x'
+			})
 		})
 	],
-	css: {
-		preprocessorOptions: {
-			scss: {
-				// Menyembunyikan peringatan deprecasi internal dari node_modules/bootstrap
-				quietDeps: true,
-				silenceDeprecations: ['import', 'global-builtin', 'color-functions', 'if-function']
-			}
+	resolve: {
+		alias: {
+			'#lib': './src/lib'
 		}
 	}
-}); 
+});
