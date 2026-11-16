@@ -19,8 +19,8 @@
 				</div>
 				<div class="col-12 col-md-6">
 					<strong class="d-block mb-1">Saluran Komunikasi</strong>
-					<p class="text-secondary-warm mb-1">Email: halo@semat-katalog.id</p>
-					<p class="text-secondary-warm mb-3">WhatsApp: +62 812-8890-4410</p>
+					<p class="text-secondary-warm mb-1">Email: alinskazahrani04@gmail.com</p>
+					<p class="text-secondary-warm mb-3">WhatsApp: +62 812-6261-5447</p>
 					<strong class="d-block mb-1">Koordinat Referensi Ongkir</strong>
 					<p class="text-secondary-warm mb-0">-6.3428, 106.7383 (Pamulang)</p>
 				</div>
