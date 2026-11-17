@@ -1,33 +1,101 @@
 <script>
 	import { onMount } from 'svelte';
 	import { enhance } from '$app/forms';
-	import { page } from '$app/state';
 	import {
 		ArrowLeft,
 		MapPin,
 		Navigation,
 		Truck,
-		CreditCard,
 		ShieldCheck,
 		CheckCircle2,
-		Copy,
 		ShoppingBag,
-		QrCode,
-		RefreshCw,
-		Clock,
-		ExternalLink
+		MessageCircle
 	} from 'lucide-svelte';
 	import { formatRupiah } from '#lib/utils/format.js';
+
+	const ADMIN_WHATSAPP_NUMBER = '6281262615447';
+	const ADMIN_WHATSAPP_DISPLAY = '+62 812-6261-5447';
+	const PAYMENT_METHOD_LABEL = 'Hubungi lewat WhatsApp';
 
 	let { data, form } = $props();
 
 	let currentOrder = $state(form?.createdOrder || data.activeOrder || null);
+	let autoOpenedInvoice = '';
+
+	function buildWhatsAppUrl(order) {
+		if (!order) return `https://wa.me/${ADMIN_WHATSAPP_NUMBER}`;
+
+		const itemLines = (order.items || [])
+			.map(
+				(item, idx) =>
+					`${idx + 1}. ${item.productNameSnapshot} (${item.variantNameSnapshot}) × ${item.quantity} = ${formatRupiah(item.subtotal)}`
+			)
+			.join('\n');
+
+		const addressText =
+			order.shippingAddress ||
+			order.shippingAddressSnapshot ||
+			[
+				order.shippingAddressDetail,
+				order.shippingDistrict && order.shippingDistrict !== '-'
+					? `Kec. ${order.shippingDistrict}`
+					: '',
+				order.shippingCity,
+				order.shippingProvince,
+				order.shippingPostalCode && order.shippingPostalCode !== '-'
+					? order.shippingPostalCode
+					: ''
+			]
+				.filter(Boolean)
+				.join(', ');
+
+		const mapsPin =
+			order.shippingLatitude && order.shippingLongitude
+				? `\n*Titik Lokasi:* https://maps.google.com/?q=${order.shippingLatitude},${order.shippingLongitude}`
+				: '';
+
+		const courierNote = order.shippingLandmark
+			? `\n*Catatan Kurir:* ${order.shippingLandmark}`
+			: '';
+
+		const message = [
+			'Halo Admin SEMAT, saya ingin konfirmasi pesanan berikut:',
+			'',
+			`*No. Invoice:* ${order.invoiceNumber}`,
+			`*Nama Penerima:* ${order.recipientName}`,
+			`*No. WhatsApp:* ${order.recipientPhone}`,
+			'',
+			'*Rincian Barang:*',
+			itemLines,
+			'',
+			`*Subtotal Produk:* ${formatRupiah(order.subtotal || 0)}`,
+			`*Kurir & Ongkir:* ${order.shippingService} — ${formatRupiah(order.shippingCost || 0)}`,
+			`*Total Pembayaran:* *${formatRupiah(order.totalAmount || 0)}*`,
+			'',
+			`*Alamat Pengiriman:*\n${addressText}${courierNote}${mapsPin}`,
+			'',
+			`*Metode Pembayaran:* ${PAYMENT_METHOD_LABEL}`,
+			'Mohon info rekening / instruksi pembayaran selanjutnya. Terima kasih!'
+		].join('\n');
+
+		return `https://wa.me/${ADMIN_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
+	}
+
+	let whatsappOrderUrl = $derived(buildWhatsAppUrl(currentOrder));
 
 	$effect(() => {
 		if (form?.createdOrder) {
 			currentOrder = form.createdOrder;
+
 			if (typeof window !== 'undefined') {
 				window.scrollTo({ top: 0, behavior: 'smooth' });
+
+				const inv = form.createdOrder.invoiceNumber;
+				if (inv && autoOpenedInvoice !== inv) {
+					autoOpenedInvoice = inv;
+					window.history.replaceState({}, '', `/checkout?invoice=${encodeURIComponent(inv)}`);
+					window.open(buildWhatsAppUrl(form.createdOrder), '_blank', 'noopener,noreferrer');
+				}
 			}
 		}
 	});
@@ -49,13 +117,9 @@
 	let destLat = $state(-6.3465);
 	let destLng = $state(106.7442);
 
-	// Kurir & metode pembayaran
+	// Kurir & status submit
 	let selectedCourier = $state('reguler');
-	let selectedPayment = $state('QRIS');
 	let isSubmitting = $state(false);
-	let copiedVa = $state(false);
-	let isCheckingStatus = $state(false);
-	let countdownText = $state('23:59:59');
 
 	// Referensi peta Leaflet
 	let mapEl = $state(null);
@@ -63,27 +127,6 @@
 	let destMarker = null;
 	let routeLine = null;
 	let gpsLoading = $state(false);
-
-	const paymentGroups = [
-		{
-			title: 'QRIS & Dompet Digital (Scan Langsung)',
-			options: [
-				{ id: 'QRIS', label: 'QRIS', desc: 'Scan QR dari semua aplikasi bank & e-wallet' },
-				{ id: 'GoPay', label: 'GoPay', desc: 'QRIS & pembayaran instan GoPay' },
-				{ id: 'OVO', label: 'OVO', desc: 'QRIS & pembayaran instan OVO' },
-				{ id: 'DANA', label: 'DANA', desc: 'QRIS & pembayaran instan DANA' }
-			]
-		},
-		{
-			title: 'Virtual Account Bank (Otomatis Terverifikasi)',
-			options: [
-				{ id: 'VA BCA', label: 'VA BCA', desc: 'Virtual Account Bank Central Asia' },
-				{ id: 'VA Mandiri', label: 'VA Mandiri', desc: 'Mandiri Virtual Account' },
-				{ id: 'VA BNI', label: 'VA BNI', desc: 'BNI Virtual Account' },
-				{ id: 'VA BRI', label: 'VA BRI', desc: 'BRI Virtual Account (BRIVA)' }
-			]
-		}
-	];
 
 	const quickAreaPresets = [
 		{
@@ -132,68 +175,6 @@
 			postal: '16421'
 		}
 	];
-
-	let activePaymentMethod = $derived(currentOrder?.paymentMethod || selectedPayment);
-	let isQrisMode = $derived(
-		['QRIS', 'GoPay', 'OVO', 'DANA'].includes(activePaymentMethod)
-	);
-
-	let qrisAuthPath = $derived(
-		currentOrder ? `/bayar/${currentOrder.invoiceNumber}` : '/bayar/INV-PREVIEW'
-	);
-
-	let qrisImageUrl = $derived.by(() => {
-		if (!currentOrder) return '';
-		const origin = typeof window !== 'undefined' ? window.location.origin : page.url.origin;
-		const fullScanUrl = `${origin}/bayar/${currentOrder.invoiceNumber}`;
-		return `https://api.qrserver.com/v1/create-qr-code/?size=230x230&margin=8&data=${encodeURIComponent(
-			fullScanUrl
-		)}`;
-	});
-
-	// Polling status otomatis setiap 3 detik saat menunggu pembayaran
-	$effect(() => {
-		if (!currentOrder || currentOrder.status !== 'pending_payment') return;
-
-		const invoice = currentOrder.invoiceNumber;
-		const expiresAtMs = currentOrder.expiresAt
-			? new Date(currentOrder.expiresAt).getTime()
-			: Date.now() + 24 * 60 * 60 * 1000;
-
-		const pollTimer = setInterval(async () => {
-			try {
-				isCheckingStatus = true;
-				const res = await fetch(`/api/payment/status?invoice=${encodeURIComponent(invoice)}`);
-				if (res.ok) {
-					const statusData = await res.json();
-					if (statusData.ok && statusData.status !== currentOrder.status) {
-						currentOrder = {
-							...currentOrder,
-							status: statusData.status,
-							paidAt: statusData.paidAt
-						};
-					}
-				}
-			} catch {
-				// Abaikan galat sementara dan coba lagi pada siklus berikutnya
-			} finally {
-				isCheckingStatus = false;
-			}
-		}, 3000);
-
-		const clockTimer = setInterval(() => {
-			const diff = Math.max(0, expiresAtMs - Date.now());
-			const h = String(Math.floor(diff / 3600000)).padStart(2, '0');
-			const m = String(Math.floor((diff % 3600000) / 60000)).padStart(2, '0');
-			const s = String(Math.floor((diff % 60000) / 1000)).padStart(2, '0');
-			countdownText = `${h}:${m}:${s}`;
-		}, 1000);
-
-		return () => {
-			clearInterval(pollTimer);
-			clearInterval(clockTimer);
-		};
-	});
 
 	let distanceKm = $derived.by(() => {
 		const toRad = (deg) => (deg * Math.PI) / 180;
@@ -304,17 +285,6 @@
 		);
 	}
 
-	function getVirtualAccountNumber(invoiceNumber) {
-		const digits = String(invoiceNumber || '20261115001').replace(/\D/g, '');
-		return `88019${digits.padEnd(11, '0').slice(0, 11)}`;
-	}
-
-	function copyVaCode(code) {
-		navigator.clipboard?.writeText(code);
-		copiedVa = true;
-		setTimeout(() => (copiedVa = false), 2000);
-	}
-
 	onMount(async () => {
 		if (currentOrder || !data.cart?.items?.length) return;
 
@@ -382,7 +352,7 @@
 	<title>Checkout & Pengiriman — SEMAT</title>
 </svelte:head>
 
-<!-- HEADER CHECKOUT MANDIRI (KEMBALI KE BERANDA TANPA LOGOUT) -->
+<!-- HEADER CHECKOUT MANDIRI -->
 <header class="sticky-top hairline-bottom" style="background-color: var(--bg-surface); z-index: 1020;">
 	<div class="container py-3 d-flex flex-wrap justify-content-between align-items-center gap-3">
 		<div class="d-flex align-items-center gap-2.5">
@@ -413,13 +383,16 @@
 <section class="py-4 py-lg-5">
 	<div class="container">
 		{#if form?.error}
-			<div class="p-3 rounded mb-4 small" style="background-color: var(--status-danger-bg); color: var(--status-danger-text);">
+			<div
+				class="p-3 rounded mb-4 small"
+				style="background-color: var(--status-danger-bg); color: var(--status-danger-text);"
+			>
 				{form.error}
 			</div>
 		{/if}
 
 		<!-- ================================================================= -->
-		<!-- KONDISI A: VALIDASI PEMBAYARAN OTOMATIS (QRIS & VIRTUAL ACCOUNT)  -->
+		<!-- KONDISI A: INVOICE TERBIT & KONFIRMASI VIA WHATSAPP               -->
 		<!-- ================================================================= -->
 		{#if currentOrder}
 			<div class="mx-auto" style="max-width: 720px;">
@@ -432,139 +405,87 @@
 							>
 								<CheckCircle2 size={30} />
 							</div>
-							<span class="catalog-kicker d-block mb-1">Tervalidasi Otomatis</span>
-							<h1 class="h3 font-heading fw-bold mb-2">Pembayaran Diterima</h1>
+							<span class="catalog-kicker d-block mb-1">Pembayaran Dikonfirmasi</span>
+							<h1 class="h3 font-heading fw-bold mb-2">Pesanan Siap Diproses</h1>
 							<p class="small text-secondary-warm mb-0">
-								Terima kasih, <strong>{currentOrder.recipientName}</strong>. Transaksi <strong>{currentOrder.invoiceNumber}</strong> telah terverifikasi otomatis dan masuk ke antrean pengemasan studio SEMAT.
+								Terima kasih, <strong>{currentOrder.recipientName}</strong>. Transaksi
+								<strong>{currentOrder.invoiceNumber}</strong> sudah dikonfirmasi dan masuk ke antrean pengemasan studio SEMAT.
 							</p>
 						</div>
 					{:else}
 						<div class="pb-4 mb-4 hairline-bottom d-flex flex-wrap justify-content-between align-items-start gap-3">
 							<div>
-								<span class="catalog-kicker d-block mb-1">Menunggu Pembayaran</span>
-								<h1 class="h3 font-heading fw-bold mb-1">Selesaikan Pembayaran</h1>
+								<span class="catalog-kicker d-block mb-1">Pesanan Berhasil Dibuat</span>
+								<h1 class="h3 font-heading fw-bold mb-1">Konfirmasi via WhatsApp</h1>
 								<span class="small text-secondary-warm">
 									Nomor Invoice: <strong class="text-dark">{currentOrder.invoiceNumber}</strong>
 								</span>
 							</div>
 
 							<div class="text-end">
-								<span class="badge btn-taupe px-3 py-1.5 d-inline-block mb-1">
-									{activePaymentMethod}
-								</span>
-								<span class="d-flex align-items-center justify-content-end gap-1 small text-secondary-warm">
-									<Clock size={13} />
-									<span class="price-tabular">{countdownText}</span>
+								<span class="badge btn-taupe px-3 py-1.5 d-inline-block">
+									{PAYMENT_METHOD_LABEL}
 								</span>
 							</div>
 						</div>
 
-						<!-- TAMPILAN KHUSUS QRIS / E-WALLET -->
-						{#if isQrisMode}
-							<div class="surface-subtle p-4 rounded mb-4 text-center">
-								<div class="d-inline-flex align-items-center gap-1.5 px-3 py-1 rounded bg-white border mb-2">
-									<QrCode size={15} />
-									<strong class="small">QRIS • {activePaymentMethod}</strong>
-								</div>
-								<div class="fw-bold font-heading">SEMAT STUDIO INDONESIA</div>
-								<div class="text-secondary-warm mb-3" style="font-size: 0.74rem;">
-									NMID: ID1026384920192
-								</div>
-
-								<div
-									class="d-inline-block p-3 bg-white rounded border mb-3"
-									style="box-shadow: 0 2px 10px rgba(0,0,0,0.04);"
-								>
-									<img
-										src={qrisImageUrl}
-										alt="Kode QRIS Pembayaran {currentOrder.invoiceNumber}"
-										width="220"
-										height="220"
-										class="d-block"
-									/>
-								</div>
-
-								<div class="mb-2">
-									<span class="small text-secondary-warm d-block">Total Tagihan QRIS</span>
-									<span class="price-tabular fs-4 fw-bold text-dark">
-										{formatRupiah(currentOrder.totalAmount)}
-									</span>
-								</div>
-
-								<p class="small text-secondary-warm mx-auto mb-2" style="max-width: 440px;">
-									Pindai kode QR di atas menggunakan kamera ponsel atau aplikasi pembayaran. Halaman ini akan tervalidasi otomatis setelah QRIS dipindai.
-								</p>
-
-								<a
-									href={qrisAuthPath}
-									target="_blank"
-									rel="noopener noreferrer"
-									class="btn btn-outline-hairline btn-sm bg-white d-inline-flex align-items-center gap-1.5"
-								>
-									<ExternalLink size={13} />
-									<span>Buka Halaman Scan QRIS di Tab Baru</span>
-								</a>
+						<!-- KOTAK AKSI UTAMA WHATSAPP -->
+						<div class="surface-subtle p-4 rounded mb-4 text-center border">
+							<div
+								class="d-inline-flex align-items-center justify-content-center rounded-circle mb-2.5"
+								style="width: 48px; height: 48px; background-color: #25D366; color: #ffffff;"
+							>
+								<MessageCircle size={24} />
 							</div>
-						{:else}
-							<!-- TAMPILAN VIRTUAL ACCOUNT BANK -->
-							<div class="surface-subtle p-4 rounded mb-4">
-								<div class="row g-3 align-items-center">
-									<div class="col-12 col-sm-7">
-										<span class="small text-secondary-warm d-block mb-1">
-											Nomor Virtual Account ({activePaymentMethod})
-										</span>
-										<div class="d-flex align-items-center gap-2">
-											<code class="fs-5 fw-bold text-dark">{getVirtualAccountNumber(currentOrder.invoiceNumber)}</code>
-											<button
-												type="button"
-												class="btn btn-outline-hairline btn-sm py-1 px-2 d-inline-flex align-items-center gap-1"
-												onclick={() => copyVaCode(getVirtualAccountNumber(currentOrder.invoiceNumber))}
-											>
-												<Copy size={13} />
-												<span>{copiedVa ? 'Tersalin' : 'Salin'}</span>
-											</button>
-										</div>
-										<span class="d-block text-secondary-warm mt-2" style="font-size: 0.75rem;">
-											Atas Nama: <strong>SEMAT STUDIO INDONESIA</strong>
-										</span>
-									</div>
+							<h2 class="h5 font-heading fw-bold mb-1">Kirim Rincian Pesanan ke Admin</h2>
+							<p class="small text-secondary-warm mx-auto mb-3" style="max-width: 460px;">
+								Rincian produk, ongkos kirim, alamat lengkap, dan total tagihan sebesar
+								<strong class="text-dark">{formatRupiah(currentOrder.totalAmount)}</strong> sudah disiapkan otomatis untuk dikirim ke WhatsApp Admin SEMAT (<strong>{ADMIN_WHATSAPP_DISPLAY}</strong>).
+							</p>
 
-									<div class="col-12 col-sm-5 text-sm-end">
-										<span class="small text-secondary-warm d-block mb-1">Total Tagihan</span>
-										<span class="price-tabular fs-4 fw-bold text-dark">
-											{formatRupiah(currentOrder.totalAmount)}
-										</span>
-									</div>
-								</div>
-							</div>
-						{/if}
+							<a
+								href={whatsappOrderUrl}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="btn fw-semibold px-4 py-2.5 d-inline-flex align-items-center justify-content-center gap-2"
+								style="background-color: #25D366; color: #ffffff; border: none;"
+							>
+								<MessageCircle size={18} />
+								<span>Buka WhatsApp & Kirim Pesanan</span>
+							</a>
 
-						<!-- Status Pemantauan Otomatis (Non-Manual) -->
-						<div class="p-3 rounded border mb-4 d-flex align-items-center justify-content-between gap-2 small bg-white">
-							<div class="d-flex align-items-center gap-2">
-								<RefreshCw size={15} class={isCheckingStatus ? 'spin-icon text-dark' : 'text-secondary-warm'} />
-								<span>
-									Sistem memverifikasi pembayaran otomatis setiap 3 detik...
-								</span>
-							</div>
-							<span class="badge bg-light text-dark border">Auto-Verify Aktif</span>
+							<span class="d-block text-secondary-warm mt-2.5" style="font-size: 0.74rem;">
+								Klik tombol di atas jika aplikasi WhatsApp belum terbuka secara otomatis.
+							</span>
 						</div>
 					{/if}
 
 					<!-- Rincian Pengiriman & Item Invoice -->
 					<div class="mb-4">
-						<h2 class="h6 font-heading fw-semibold mb-2">Rincian Pengiriman & Barang</h2>
+						<div class="d-flex justify-content-between align-items-center mb-2">
+							<h2 class="h6 font-heading fw-semibold mb-0">Rincian Pengiriman & Barang</h2>
+							<span class="price-tabular fw-bold text-dark">
+								Total: {formatRupiah(currentOrder.totalAmount)}
+							</span>
+						</div>
+
 						<div class="p-3 rounded border mb-3 small" style="background-color: var(--bg-canvas);">
 							<strong class="d-block">{currentOrder.recipientName} ({currentOrder.recipientPhone})</strong>
-							<p class="text-secondary-warm mb-1">{currentOrder.shippingAddress || currentOrder.shippingAddressSnapshot}</p>
-							<span class="fw-medium">Layanan Kurir: {currentOrder.shippingService} ({formatRupiah(currentOrder.shippingCost || 0)})</span>
+							<p class="text-secondary-warm mb-1">
+								{currentOrder.shippingAddress || currentOrder.shippingAddressSnapshot}
+							</p>
+							<span class="fw-medium">
+								Layanan Kurir: {currentOrder.shippingService} ({formatRupiah(currentOrder.shippingCost || 0)})
+							</span>
 						</div>
 
 						<div class="d-flex flex-column gap-2 small">
 							{#each currentOrder.items as item}
 								<div class="d-flex justify-content-between align-items-center py-2 px-3 rounded border bg-white">
 									<span>
-										{item.productNameSnapshot} <span class="text-secondary-warm">({item.variantNameSnapshot})</span> × <strong>{item.quantity}</strong>
+										{item.productNameSnapshot}
+										<span class="text-secondary-warm">({item.variantNameSnapshot})</span> ×
+										<strong>{item.quantity}</strong>
 									</span>
 									<span class="price-tabular fw-semibold">{formatRupiah(item.subtotal)}</span>
 								</div>
@@ -616,7 +537,7 @@
 				<input type="hidden" name="destLat" value={destLat} />
 				<input type="hidden" name="destLng" value={destLng} />
 				<input type="hidden" name="courierId" value={selectedCourier} />
-				<input type="hidden" name="paymentMethod" value={selectedPayment} />
+				<input type="hidden" name="paymentMethod" value={PAYMENT_METHOD_LABEL} />
 
 				<div class="row g-4">
 					<div class="col-12 col-lg-7">
@@ -672,7 +593,9 @@
 								</div>
 
 								<div class="col-12">
-									<label for="addrDetail" class="form-label small">Alamat Lengkap (Jalan, Nomor Rumah / Gedung)</label>
+									<label for="addrDetail" class="form-label small">
+										Alamat Lengkap (Jalan, Nomor Rumah / Gedung)
+									</label>
 									<textarea
 										id="addrDetail"
 										name="addressDetail"
@@ -840,43 +763,40 @@
 							</div>
 						</div>
 
-						<!-- 4. Metode Pembayaran -->
+						<!-- 4. Metode Pembayaran (Khusus WhatsApp Admin) -->
 						<div class="surface-card p-4">
 							<div class="d-flex align-items-center gap-2 pb-3 mb-3 hairline-bottom">
-								<CreditCard size={18} />
+								<MessageCircle size={18} />
 								<h2 class="h5 font-heading fw-semibold mb-0">4. Metode Pembayaran</h2>
 							</div>
 
-							{#each paymentGroups as group}
-								<span class="small text-secondary-warm fw-semibold d-block mb-2 mt-2">
-									{group.title}
-								</span>
-								<div class="row g-2 mb-3">
-									{#each group.options as pay}
-										<div class="col-6">
-											<label
-												class="p-2.5 rounded border d-flex align-items-start gap-2 h-100"
-												style="background-color: {selectedPayment === pay.id ? 'var(--bg-subtle)' : 'var(--bg-canvas)'}; cursor: pointer;"
-											>
-												<input
-													type="radio"
-													name="paymentRadio"
-													class="mt-1"
-													value={pay.id}
-													checked={selectedPayment === pay.id}
-													onchange={() => (selectedPayment = pay.id)}
-												/>
-												<div>
-													<strong class="d-block small">{pay.label}</strong>
-													<span class="text-secondary-warm d-block" style="font-size: 0.7rem;">
-														{pay.desc}
-													</span>
-												</div>
-											</label>
-										</div>
-									{/each}
+							<label
+								class="p-3 rounded border d-flex align-items-start gap-3"
+								style="background-color: var(--bg-subtle); cursor: pointer;"
+							>
+								<input
+									type="radio"
+									name="paymentRadio"
+									class="mt-1"
+									value={PAYMENT_METHOD_LABEL}
+									checked
+									readonly
+								/>
+								<div class="flex-grow-1">
+									<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-1">
+										<strong class="small text-dark">{PAYMENT_METHOD_LABEL}</strong>
+										<span
+											class="badge"
+											style="background-color: #25D366; color: #ffffff; font-size: 0.68rem;"
+										>
+											WhatsApp Official
+										</span>
+									</div>
+									<p class="text-secondary-warm mb-0" style="font-size: 0.76rem;">
+										Setelah menekan tombol checkout, rincian barang, ongkos kirim, alamat pengiriman, dan total tagihan akan otomatis dibuatkan menjadi pesan WhatsApp ke Admin SEMAT (<strong>{ADMIN_WHATSAPP_DISPLAY}</strong>).
+									</p>
 								</div>
-							{/each}
+							</label>
 						</div>
 					</div>
 
@@ -887,7 +807,10 @@
 								Ringkasan Pesanan ({data.cart.totalQuantity} Item)
 							</h2>
 
-							<div class="d-flex flex-column gap-2.5 mb-3 pb-3 hairline-bottom" style="max-height: 320px; overflow-y: auto;">
+							<div
+								class="d-flex flex-column gap-2.5 mb-3 pb-3 hairline-bottom"
+								style="max-height: 320px; overflow-y: auto;"
+							>
 								{#each data.cart.items as item}
 									<div class="d-flex gap-2.5 align-items-center small">
 										<img
@@ -922,7 +845,7 @@
 								</div>
 								<div class="d-flex justify-content-between">
 									<span class="text-secondary-warm">Metode Pembayaran</span>
-									<span class="fw-semibold text-dark">{selectedPayment}</span>
+									<span class="fw-semibold text-dark">{PAYMENT_METHOD_LABEL}</span>
 								</div>
 							</div>
 
@@ -933,14 +856,17 @@
 
 							<button
 								type="submit"
-								class="btn btn-primary w-100 py-2.5 fw-semibold"
+								class="btn btn-primary w-100 py-2.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-2"
 								disabled={isSubmitting}
 							>
-								{isSubmitting ? 'Memproses Pesanan...' : 'Buat Pesanan & Lanjut Bayar'}
+								<MessageCircle size={17} />
+								<span>
+									{isSubmitting ? 'Menyiapkan Pesanan...' : 'Buat Pesanan & Hubungi WhatsApp'}
+								</span>
 							</button>
 
 							<p class="text-secondary-warm text-center mt-2.5 mb-0" style="font-size: 0.72rem;">
-								Stok produk otomatis dikunci saat invoice diterbitkan.
+								Pesanan tercatat di akun Anda & format konfirmasi WhatsApp otomatis disiapkan.
 							</p>
 						</div>
 					</div>
@@ -949,18 +875,3 @@
 		{/if}
 	</div>
 </section>
-
-<style>
-	:global(.spin-icon) {
-		animation: spin360 1s linear infinite;
-	}
-
-	@keyframes spin360 {
-		from {
-			transform: rotate(0deg);
-		}
-		to {
-			transform: rotate(360deg);
-		}
-	}
-</style>

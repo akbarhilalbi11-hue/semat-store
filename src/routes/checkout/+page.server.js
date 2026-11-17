@@ -17,6 +17,8 @@ const WORKSHOP_ORIGIN = {
 	label: 'Workshop SEMAT — Pamulang, Tangerang Selatan'
 };
 
+const DEFAULT_PAYMENT_METHOD = 'Hubungi lewat WhatsApp';
+
 function extractRows(result) {
 	if (Array.isArray(result)) return result;
 	return result?.rows || [];
@@ -40,10 +42,10 @@ function formatOrderAddress(order) {
 }
 
 function extractPaymentMethod(order) {
-	if (!order) return 'VA BCA';
+	if (!order) return DEFAULT_PAYMENT_METHOD;
 	if (order.paymentMethod) return order.paymentMethod;
 	const match = String(order.notes || '').match(/Metode:\s*([^|]+)/i);
-	return match ? match[1].trim() : 'VA BCA';
+	return match ? match[1].trim() : DEFAULT_PAYMENT_METHOD;
 }
 
 function calculateHaversineKm(lat1, lon1, lat2, lon2) {
@@ -105,10 +107,10 @@ async function getUserCartDetailed(userId) {
 			)
 		: await db.execute(
 				sql`SELECT ci.id, ci.product_id, ci.variant_id, ci.quantity
-				    FROM cart_items ci
-				    INNER JOIN carts c ON ci.cart_id = c.id
-				    WHERE c.user_id = ${userId}
-				    ORDER BY ci.id ASC`
+					FROM cart_items ci
+					INNER JOIN carts c ON ci.cart_id = c.id
+					WHERE c.user_id = ${userId}
+					ORDER BY ci.id ASC`
 			);
 
 	const rawRows = extractRows(rawCartRes);
@@ -234,7 +236,7 @@ export const actions = {
 			const destLat = Number(fd.get('destLat') || WORKSHOP_ORIGIN.lat);
 			const destLng = Number(fd.get('destLng') || WORKSHOP_ORIGIN.lng);
 			const courierId = String(fd.get('courierId') || 'reguler').trim();
-			const paymentMethod = String(fd.get('paymentMethod') || 'VA BCA').trim();
+			const paymentMethod = DEFAULT_PAYMENT_METHOD;
 			const orderNotes = String(fd.get('orderNotes') || '').trim();
 
 			if (!recipientName || !recipientPhone || !addressDetail || !city || !province) {
@@ -370,49 +372,5 @@ export const actions = {
 				error: `Gagal membuat pesanan: ${err?.message || 'Terjadi kendala pada server.'}`
 			});
 		}
-	},
-
-	confirmPayment: async ({ request, locals }) => {
-		if (!locals.user) {
-			throw redirect(303, '/masuk?redirect=/checkout');
-		}
-
-		const fd = await request.formData();
-		const orderId = Number(fd.get('orderId'));
-
-		if (!orderId) {
-			return fail(400, { error: 'ID pesanan tidak valid.' });
-		}
-
-		const now = new Date();
-		await db
-			.update(orders)
-			.set({
-				status: 'paid',
-				paidAt: now,
-				updatedAt: now
-			})
-			.where(and(eq(orders.id, orderId), eq(orders.userId, locals.user.id)));
-
-		const [updatedOrder] = await db
-			.select()
-			.from(orders)
-			.where(and(eq(orders.id, orderId), eq(orders.userId, locals.user.id)))
-			.limit(1);
-
-		const items = await db
-			.select()
-			.from(orderItems)
-			.where(eq(orderItems.orderId, orderId));
-
-		return {
-			paymentSuccess: true,
-			createdOrder: {
-				...updatedOrder,
-				shippingAddress: formatOrderAddress(updatedOrder),
-				paymentMethod: extractPaymentMethod(updatedOrder),
-				items
-			}
-		};
 	}
 };
