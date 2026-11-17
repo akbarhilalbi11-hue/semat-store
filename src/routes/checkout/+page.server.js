@@ -10,11 +10,9 @@ import {
 	orderItems
 } from '#lib/server/db/schema.js';
 
-// Koordinat Workshop & Titik Kirim SEMAT: Pamulang, Tangerang Selatan, Banten
-const WORKSHOP_ORIGIN = {
+const DEFAULT_COORDS = {
 	lat: -6.3428,
-	lng: 106.7383,
-	label: 'Workshop SEMAT — Pamulang, Tangerang Selatan'
+	lng: 106.7383
 };
 
 const DEFAULT_PAYMENT_METHOD = 'Hubungi lewat WhatsApp';
@@ -46,48 +44,6 @@ function extractPaymentMethod(order) {
 	if (order.paymentMethod) return order.paymentMethod;
 	const match = String(order.notes || '').match(/Metode:\s*([^|]+)/i);
 	return match ? match[1].trim() : DEFAULT_PAYMENT_METHOD;
-}
-
-function calculateHaversineKm(lat1, lon1, lat2, lon2) {
-	const toRad = (deg) => (deg * Math.PI) / 180;
-	const R = 6371;
-	const dLat = toRad(lat2 - lat1);
-	const dLon = toRad(lon2 - lon1);
-	const a =
-		Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-		Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-	const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-	return Math.max(0.5, Number((R * c).toFixed(1)));
-}
-
-function roundTo500(amount) {
-	return Math.ceil(amount / 500) * 500;
-}
-
-function computeShippingRates(distanceKm) {
-	return [
-		{
-			id: 'reguler',
-			name: 'Reguler (Kurir Standar)',
-			eta: '2–3 Hari Kerja',
-			cost: roundTo500(9000 + distanceKm * 1500),
-			available: true
-		},
-		{
-			id: 'kilat',
-			name: 'Kilat / Next Day',
-			eta: '1 Hari Sampai',
-			cost: roundTo500(15000 + distanceKm * 2200),
-			available: true
-		},
-		{
-			id: 'instan',
-			name: 'Instan (Kurir Motor Langsung)',
-			eta: '2–4 Jam (Maks. 40 km)',
-			cost: roundTo500(18000 + distanceKm * 3000),
-			available: distanceKm <= 40
-		}
-	];
 }
 
 async function detectCartHasUserIdColumn() {
@@ -209,7 +165,6 @@ export async function load({ locals, url }) {
 
 	return {
 		user: locals.user,
-		workshop: WORKSHOP_ORIGIN,
 		cart,
 		savedAddresses,
 		activeOrder
@@ -232,10 +187,6 @@ export const actions = {
 			const province = String(fd.get('province') || '').trim();
 			const postalCode = String(fd.get('postalCode') || '').trim();
 			const saveToProfile = fd.get('saveToProfile') === 'on';
-
-			const destLat = Number(fd.get('destLat') || WORKSHOP_ORIGIN.lat);
-			const destLng = Number(fd.get('destLng') || WORKSHOP_ORIGIN.lng);
-			const courierId = String(fd.get('courierId') || 'reguler').trim();
 			const paymentMethod = DEFAULT_PAYMENT_METHOD;
 			const orderNotes = String(fd.get('orderNotes') || '').trim();
 
@@ -260,17 +211,6 @@ export const actions = {
 				}
 			}
 
-			const distanceKm = calculateHaversineKm(
-				WORKSHOP_ORIGIN.lat,
-				WORKSHOP_ORIGIN.lng,
-				destLat,
-				destLng
-			);
-			const distanceMeters = Math.round(distanceKm * 1000);
-			const rates = computeShippingRates(distanceKm);
-			const chosenRate =
-				rates.find((r) => r.id === courierId && r.available) || rates[0];
-
 			if (saveToProfile) {
 				try {
 					await db.insert(addresses).values({
@@ -283,8 +223,8 @@ export const actions = {
 						city,
 						province,
 						postalCode: postalCode || '-',
-						latitude: destLat,
-						longitude: destLng
+						latitude: DEFAULT_COORDS.lat,
+						longitude: DEFAULT_COORDS.lng
 					});
 				} catch {
 					// Abaikan jika skema alamat berbeda agar pembuatan pesanan tetap berlanjut
@@ -298,8 +238,7 @@ export const actions = {
 			const randSuffix = String(Math.floor(100 + Math.random() * 900));
 			const invoiceNumber = `INV-${ymd}-${randSuffix}`;
 
-			const totalAmount = cart.subtotal + chosenRate.cost;
-			const shippingServiceLabel = `${chosenRate.name} (${distanceKm} km)`;
+			const totalAmount = cart.subtotal;
 			const combinedNotes = orderNotes
 				? `${orderNotes} | Metode: ${paymentMethod}`
 				: `Metode: ${paymentMethod}`;
@@ -319,12 +258,12 @@ export const actions = {
 					shippingPostalCode: postalCode || '-',
 					shippingAddressDetail: addressDetail,
 					shippingLandmark: orderNotes || null,
-					shippingLatitude: destLat,
-					shippingLongitude: destLng,
-					distanceMeters,
-					shippingService: shippingServiceLabel,
-					shippingEtd: chosenRate.eta,
-					shippingCost: chosenRate.cost,
+					shippingLatitude: DEFAULT_COORDS.lat,
+					shippingLongitude: DEFAULT_COORDS.lng,
+					distanceMeters: 0,
+					shippingService: 'Konfirmasi via WhatsApp',
+					shippingEtd: '-',
+					shippingCost: 0,
 					subtotal: cart.subtotal,
 					totalAmount,
 					notes: combinedNotes,

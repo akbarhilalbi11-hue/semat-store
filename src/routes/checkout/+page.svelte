@@ -1,11 +1,8 @@
 <script>
-	import { onMount } from 'svelte';
 	import { enhance } from '$app/forms';
 	import {
 		ArrowLeft,
 		MapPin,
-		Navigation,
-		Truck,
 		ShieldCheck,
 		CheckCircle2,
 		ShoppingBag,
@@ -49,14 +46,7 @@
 				.filter(Boolean)
 				.join(', ');
 
-		const mapsPin =
-			order.shippingLatitude && order.shippingLongitude
-				? `\n*Titik Lokasi:* https://maps.google.com/?q=${order.shippingLatitude},${order.shippingLongitude}`
-				: '';
-
-		const courierNote = order.shippingLandmark
-			? `\n*Catatan Kurir:* ${order.shippingLandmark}`
-			: '';
+		const addressNote = order.shippingLandmark ? `\n*Catatan:* ${order.shippingLandmark}` : '';
 
 		const message = [
 			'Halo Admin SEMAT, saya ingin konfirmasi pesanan berikut:',
@@ -68,14 +58,12 @@
 			'*Rincian Barang:*',
 			itemLines,
 			'',
-			`*Subtotal Produk:* ${formatRupiah(order.subtotal || 0)}`,
-			`*Kurir & Ongkir:* ${order.shippingService} — ${formatRupiah(order.shippingCost || 0)}`,
-			`*Total Pembayaran:* *${formatRupiah(order.totalAmount || 0)}*`,
+			`*Total Pembayaran:* *${formatRupiah(order.totalAmount || order.subtotal || 0)}*`,
 			'',
-			`*Alamat Pengiriman:*\n${addressText}${courierNote}${mapsPin}`,
+			`*Alamat Pengiriman:*\n${addressText}${addressNote}`,
 			'',
 			`*Metode Pembayaran:* ${PAYMENT_METHOD_LABEL}`,
-			'Mohon info rekening / instruksi pembayaran selanjutnya. Terima kasih!'
+			'Mohon info instruksi pembayaran selanjutnya. Terima kasih!'
 		].join('\n');
 
 		return `https://wa.me/${ADMIN_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
@@ -112,123 +100,9 @@
 	let postalCode = $state(defaultAddr?.postalCode || '');
 	let orderNotes = $state('');
 	let saveToProfile = $state(!defaultAddr);
-
-	// Koordinat titik kirim
-	let destLat = $state(-6.3465);
-	let destLng = $state(106.7442);
-
-	// Kurir & status submit
-	let selectedCourier = $state('reguler');
 	let isSubmitting = $state(false);
 
-	// Referensi peta Leaflet
-	let mapEl = $state(null);
-	let mapInstance = null;
-	let destMarker = null;
-	let routeLine = null;
-	let gpsLoading = $state(false);
-
-	const quickAreaPresets = [
-		{
-			label: 'Pamulang (Tangsel)',
-			lat: -6.3465,
-			lng: 106.7442,
-			district: 'Pamulang',
-			city: 'Kota Tangerang Selatan',
-			province: 'Banten',
-			postal: '15417'
-		},
-		{
-			label: 'BSD / Serpong',
-			lat: -6.3019,
-			lng: 106.6527,
-			district: 'Serpong',
-			city: 'Kota Tangerang Selatan',
-			province: 'Banten',
-			postal: '15310'
-		},
-		{
-			label: 'Jakarta Selatan',
-			lat: -6.2615,
-			lng: 106.8106,
-			district: 'Kebayoran Baru',
-			city: 'Jakarta Selatan',
-			province: 'DKI Jakarta',
-			postal: '12160'
-		},
-		{
-			label: 'Kota Bogor',
-			lat: -6.5971,
-			lng: 106.806,
-			district: 'Bogor Tengah',
-			city: 'Kota Bogor',
-			province: 'Jawa Barat',
-			postal: '16122'
-		},
-		{
-			label: 'Kota Depok',
-			lat: -6.4025,
-			lng: 106.7942,
-			district: 'Beji',
-			city: 'Kota Depok',
-			province: 'Jawa Barat',
-			postal: '16421'
-		}
-	];
-
-	let distanceKm = $derived.by(() => {
-		const toRad = (deg) => (deg * Math.PI) / 180;
-		const R = 6371;
-		const dLat = toRad(destLat - data.workshop.lat);
-		const dLon = toRad(destLng - data.workshop.lng);
-		const a =
-			Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-			Math.cos(toRad(data.workshop.lat)) *
-				Math.cos(toRad(destLat)) *
-				Math.sin(dLon / 2) *
-				Math.sin(dLon / 2);
-		const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-		return Math.max(0.5, Number((R * c).toFixed(1)));
-	});
-
-	let shippingOptions = $derived.by(() => {
-		const round500 = (n) => Math.ceil(n / 500) * 500;
-		return [
-			{
-				id: 'reguler',
-				name: 'Reguler (Kurir Standar)',
-				eta: 'Estimasi 2–3 Hari Kerja',
-				cost: round500(9000 + distanceKm * 1500),
-				available: true
-			},
-			{
-				id: 'kilat',
-				name: 'Kilat / Next Day',
-				eta: 'Estimasi 1 Hari Sampai',
-				cost: round500(15000 + distanceKm * 2200),
-				available: true
-			},
-			{
-				id: 'instan',
-				name: 'Instan (Kurir Motor Langsung)',
-				eta: '2–4 Jam (Khusus jarak ≤ 40 km)',
-				cost: round500(18000 + distanceKm * 3000),
-				available: distanceKm <= 40
-			}
-		];
-	});
-
-	$effect(() => {
-		if (selectedCourier === 'instan' && distanceKm > 40) {
-			selectedCourier = 'reguler';
-		}
-	});
-
-	let activeCourierObj = $derived(
-		shippingOptions.find((opt) => opt.id === selectedCourier) || shippingOptions[0]
-	);
-
-	let grandTotal = $derived((data.cart?.subtotal || 0) + (activeCourierObj?.cost || 0));
+	let grandTotal = $derived(data.cart?.subtotal || 0);
 
 	function handleSelectSavedAddress(val) {
 		selectedSavedId = val;
@@ -244,112 +118,10 @@
 			postalCode = found.postalCode || '';
 		}
 	}
-
-	function updatePinPosition(lat, lng, recenter = true) {
-		destLat = Number(lat.toFixed(6));
-		destLng = Number(lng.toFixed(6));
-		if (destMarker && mapInstance) {
-			destMarker.setLatLng([destLat, destLng]);
-			if (routeLine) {
-				routeLine.setLatLngs([
-					[data.workshop.lat, data.workshop.lng],
-					[destLat, destLng]
-				]);
-			}
-			if (recenter) {
-				mapInstance.setView([destLat, destLng], 13);
-			}
-		}
-	}
-
-	function applyAreaPreset(preset) {
-		district = preset.district;
-		city = preset.city;
-		province = preset.province;
-		postalCode = preset.postal;
-		updatePinPosition(preset.lat, preset.lng, true);
-	}
-
-	function detectCurrentGps() {
-		if (!navigator.geolocation) return;
-		gpsLoading = true;
-		navigator.geolocation.getCurrentPosition(
-			(pos) => {
-				updatePinPosition(pos.coords.latitude, pos.coords.longitude, true);
-				gpsLoading = false;
-			},
-			() => {
-				gpsLoading = false;
-			},
-			{ enableHighAccuracy: true, timeout: 8000 }
-		);
-	}
-
-	onMount(async () => {
-		if (currentOrder || !data.cart?.items?.length) return;
-
-		if (!document.getElementById('leaflet-css')) {
-			const link = document.createElement('link');
-			link.id = 'leaflet-css';
-			link.rel = 'stylesheet';
-			link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-			document.head.appendChild(link);
-		}
-
-		if (!window.L) {
-			await new Promise((resolve) => {
-				const script = document.createElement('script');
-				script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-				script.onload = resolve;
-				document.head.appendChild(script);
-			});
-		}
-
-		if (window.L && mapEl) {
-			const L = window.L;
-			mapInstance = L.map(mapEl).setView([destLat, destLng], 12);
-
-			L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-				attribution: '&copy; OpenStreetMap'
-			}).addTo(mapInstance);
-
-			L.circleMarker([data.workshop.lat, data.workshop.lng], {
-				radius: 8,
-				color: '#1F1E1B',
-				fillColor: '#8C6D53',
-				fillOpacity: 1,
-				weight: 2
-			})
-				.addTo(mapInstance)
-				.bindPopup(`<strong>${data.workshop.label}</strong><br/>Titik Asal Pengiriman`);
-
-			destMarker = L.marker([destLat, destLng], { draggable: true })
-				.addTo(mapInstance)
-				.bindPopup('<strong>Titik Antar Pesanan</strong><br/>Geser pin atau klik peta untuk menyesuaikan')
-				.openPopup();
-
-			routeLine = L.polyline(
-				[
-					[data.workshop.lat, data.workshop.lng],
-					[destLat, destLng]
-				],
-				{ color: '#1F1E1B', weight: 2, dashArray: '6, 6', opacity: 0.7 }
-			).addTo(mapInstance);
-
-			destMarker.on('dragend', () => {
-				const pos = destMarker.getLatLng();
-				updatePinPosition(pos.lat, pos.lng, false);
-			});
-
-			mapInstance.on('click', (e) => {
-				updatePinPosition(e.latlng.lat, e.latlng.lng, false);
-			});
-		}
-	});
 </script>
 
 <svelte:head>
-	<title>Checkout & Pengiriman — SEMAT</title>
+	<title>Checkout Pesanan — SEMAT</title>
 </svelte:head>
 
 <!-- HEADER CHECKOUT MANDIRI -->
@@ -439,8 +211,10 @@
 							</div>
 							<h2 class="h5 font-heading fw-bold mb-1">Kirim Rincian Pesanan ke Admin</h2>
 							<p class="small text-secondary-warm mx-auto mb-3" style="max-width: 460px;">
-								Rincian produk, ongkos kirim, alamat lengkap, dan total tagihan sebesar
-								<strong class="text-dark">{formatRupiah(currentOrder.totalAmount)}</strong> sudah disiapkan otomatis untuk dikirim ke WhatsApp Admin SEMAT (<strong>{ADMIN_WHATSAPP_DISPLAY}</strong>).
+								Rincian barang, alamat penerima, dan total tagihan sebesar
+								<strong class="text-dark">
+									{formatRupiah(currentOrder.totalAmount || currentOrder.subtotal || 0)}
+								</strong> sudah disiapkan otomatis untuk dikirim ke WhatsApp Admin SEMAT (<strong>{ADMIN_WHATSAPP_DISPLAY}</strong>).
 							</p>
 
 							<a
@@ -460,23 +234,20 @@
 						</div>
 					{/if}
 
-					<!-- Rincian Pengiriman & Item Invoice -->
+					<!-- Rincian Alamat & Item Invoice -->
 					<div class="mb-4">
 						<div class="d-flex justify-content-between align-items-center mb-2">
-							<h2 class="h6 font-heading fw-semibold mb-0">Rincian Pengiriman & Barang</h2>
+							<h2 class="h6 font-heading fw-semibold mb-0">Rincian Alamat & Barang</h2>
 							<span class="price-tabular fw-bold text-dark">
-								Total: {formatRupiah(currentOrder.totalAmount)}
+								Total: {formatRupiah(currentOrder.totalAmount || currentOrder.subtotal || 0)}
 							</span>
 						</div>
 
 						<div class="p-3 rounded border mb-3 small" style="background-color: var(--bg-canvas);">
 							<strong class="d-block">{currentOrder.recipientName} ({currentOrder.recipientPhone})</strong>
-							<p class="text-secondary-warm mb-1">
+							<p class="text-secondary-warm mb-0">
 								{currentOrder.shippingAddress || currentOrder.shippingAddressSnapshot}
 							</p>
-							<span class="fw-medium">
-								Layanan Kurir: {currentOrder.shippingService} ({formatRupiah(currentOrder.shippingCost || 0)})
-							</span>
 						</div>
 
 						<div class="d-flex flex-column gap-2 small">
@@ -534,9 +305,6 @@
 					};
 				}}
 			>
-				<input type="hidden" name="destLat" value={destLat} />
-				<input type="hidden" name="destLng" value={destLng} />
-				<input type="hidden" name="courierId" value={selectedCourier} />
 				<input type="hidden" name="paymentMethod" value={PAYMENT_METHOD_LABEL} />
 
 				<div class="row g-4">
@@ -654,13 +422,13 @@
 								</div>
 
 								<div class="col-12 col-sm-8">
-									<label for="addrNotes" class="form-label small">Catatan Kurir (Opsional)</label>
+									<label for="addrNotes" class="form-label small">Catatan Pesanan (Opsional)</label>
 									<input
 										id="addrNotes"
 										name="orderNotes"
 										type="text"
 										class="form-control form-control-sm"
-										placeholder="Patokan rumah atau titip di pos satpam"
+										placeholder="Patokan rumah atau catatan tambahan"
 										bind:value={orderNotes}
 									/>
 								</div>
@@ -680,94 +448,11 @@
 							</div>
 						</div>
 
-						<!-- 2. Peta Titik Kirim & Perhitungan Jarak Haversine -->
-						<div class="surface-card p-4 mb-4">
-							<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 pb-3 mb-3 hairline-bottom">
-								<div>
-									<h2 class="h5 font-heading fw-semibold mb-0">2. Titik Koordinat & Jarak Pengiriman</h2>
-									<span class="small text-secondary-warm">
-										Klik peta atau geser pin biru untuk menghitung ongkir dari Workshop Pamulang
-									</span>
-								</div>
-
-								<button
-									type="button"
-									class="btn btn-outline-hairline btn-sm d-inline-flex align-items-center gap-1.5"
-									onclick={detectCurrentGps}
-									disabled={gpsLoading}
-								>
-									<Navigation size={14} />
-									<span>{gpsLoading ? 'Mencari GPS...' : 'Gunakan Lokasi Saya'}</span>
-								</button>
-							</div>
-
-							<div class="d-flex flex-wrap gap-1.5 mb-2.5">
-								{#each quickAreaPresets as preset}
-									<button
-										type="button"
-										class="btn btn-outline-hairline btn-sm py-0 px-2"
-										style="font-size: 0.72rem; height: 26px;"
-										onclick={() => applyAreaPreset(preset)}
-									>
-										{preset.label}
-									</button>
-								{/each}
-							</div>
-
-							<div
-								bind:this={mapEl}
-								class="rounded border mb-2.5"
-								style="height: 250px; width: 100%; z-index: 1; background-color: var(--bg-subtle);"
-							></div>
-
-							<div class="d-flex flex-wrap justify-content-between align-items-center small text-secondary-warm">
-								<span>Koordinat Tujuan: <code>{destLat}, {destLng}</code></span>
-								<span class="text-dark fw-semibold">
-									Jarak Haversine: <span class="price-tabular">{distanceKm} km</span> dari Pamulang
-								</span>
-							</div>
-						</div>
-
-						<!-- 3. Layanan Kurir -->
-						<div class="surface-card p-4 mb-4">
-							<div class="d-flex align-items-center gap-2 pb-3 mb-3 hairline-bottom">
-								<Truck size={18} />
-								<h2 class="h5 font-heading fw-semibold mb-0">3. Pilih Layanan Pengiriman</h2>
-							</div>
-
-							<div class="d-flex flex-column gap-2">
-								{#each shippingOptions as opt}
-									<label
-										class="p-3 rounded border d-flex justify-content-between align-items-center gap-3 {opt.available
-											? 'cursor-pointer'
-											: 'opacity-50'}"
-										style="background-color: {selectedCourier === opt.id ? 'var(--bg-subtle)' : 'var(--bg-canvas)'}; cursor: {opt.available ? 'pointer' : 'not-allowed'};"
-									>
-										<div class="d-flex align-items-center gap-2.5">
-											<input
-												type="radio"
-												name="courierRadio"
-												value={opt.id}
-												checked={selectedCourier === opt.id}
-												disabled={!opt.available}
-												onchange={() => (selectedCourier = opt.id)}
-											/>
-											<div>
-												<strong class="d-block small">{opt.name}</strong>
-												<span class="text-secondary-warm" style="font-size: 0.74rem;">{opt.eta}</span>
-											</div>
-										</div>
-										<span class="price-tabular fw-bold small">{formatRupiah(opt.cost)}</span>
-									</label>
-								{/each}
-							</div>
-						</div>
-
-						<!-- 4. Metode Pembayaran (Khusus WhatsApp Admin) -->
+						<!-- 2. Metode Pembayaran (Khusus WhatsApp Admin) -->
 						<div class="surface-card p-4">
 							<div class="d-flex align-items-center gap-2 pb-3 mb-3 hairline-bottom">
 								<MessageCircle size={18} />
-								<h2 class="h5 font-heading fw-semibold mb-0">4. Metode Pembayaran</h2>
+								<h2 class="h5 font-heading fw-semibold mb-0">2. Metode Pembayaran</h2>
 							</div>
 
 							<label
@@ -793,7 +478,7 @@
 										</span>
 									</div>
 									<p class="text-secondary-warm mb-0" style="font-size: 0.76rem;">
-										Setelah menekan tombol checkout, rincian barang, ongkos kirim, alamat pengiriman, dan total tagihan akan otomatis dibuatkan menjadi pesan WhatsApp ke Admin SEMAT (<strong>{ADMIN_WHATSAPP_DISPLAY}</strong>).
+										Setelah menekan tombol checkout, rincian barang, alamat penerima, dan total tagihan akan otomatis dibuatkan menjadi pesan WhatsApp ke Admin SEMAT (<strong>{ADMIN_WHATSAPP_DISPLAY}</strong>).
 									</p>
 								</div>
 							</label>
@@ -836,12 +521,6 @@
 								<div class="d-flex justify-content-between">
 									<span class="text-secondary-warm">Subtotal Produk</span>
 									<span class="price-tabular fw-medium">{formatRupiah(data.cart.subtotal)}</span>
-								</div>
-								<div class="d-flex justify-content-between">
-									<span class="text-secondary-warm">
-										Ongkos Kirim ({distanceKm} km • {activeCourierObj?.name})
-									</span>
-									<span class="price-tabular fw-medium">{formatRupiah(activeCourierObj?.cost || 0)}</span>
 								</div>
 								<div class="d-flex justify-content-between">
 									<span class="text-secondary-warm">Metode Pembayaran</span>

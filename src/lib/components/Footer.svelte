@@ -41,26 +41,32 @@
 			</div>
 
 			<!-- Kolom 4: Simulasi Pembayaran & Kurir -->
-			<div class="col-12 col-md-6 col-lg-3">
-				<h6 class="font-heading fw-semibold small text-uppercase mb-3" style="letter-spacing: 0.05em;">
-					Metode & Pengiriman
-				</h6>
-				<div class="d-flex flex-wrap gap-1 mb-3">
-					{#each ['VA BCA', 'VA Mandiri', 'VA BNI', 'VA BRI', 'QRIS', 'GoPay', 'OVO', 'DANA'] as metode}
-						<span class="badge fw-normal text-dark border" style="background-color: var(--bg-surface); border-color: var(--border-hairline) !important;">
-							{metode}
-						</span>
-					{/each}
+			<div>
+	<h3 class="small fw-bold text-uppercase mb-3" style="letter-spacing: 0.08em;">
+		METODE &amp; PENGIRIMAN
+	</h3>
+
+				<div class="d-flex flex-wrap gap-2 mb-3">
+					<span class="px-2.5 py-1 bg-white border rounded small text-dark">
+						Hubungi lewat WhatsApp
+					</span>
+					<span class="px-2.5 py-1 bg-white border rounded small text-dark">
+						Kurir Reguler
+					</span>
+					<span class="px-2.5 py-1 bg-white border rounded small text-dark">
+						Kilat &amp; Instan
+					</span>
 				</div>
+
 				<p class="small text-secondary-warm mb-0">
-					Tarif pengiriman dihitung presisi berdasarkan koordinat jarak titik kirim.
+					Konfirmasi pesanan melalui whatsapp.
 				</p>
 			</div>
 		</div>
 
 		<div class="hairline-top mt-4 pt-3 d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2 small text-secondary-warm">
-			<span>© {new Date().getFullYear()} SEMAT Katalog. Proyek Simulasi E-Commerce Akademik.</span>
-			<span>Seluruh transaksi bersifat simulasi demo.</span>
+			<span>© {new Date().getFullYear()} SEMAT STORE.</span>
+			<span>Selamat belanja dan jaga fotocard kesayanganmu dengan cardholder di sini!.</span>
 		</div>
 	</div>
 </footer>
